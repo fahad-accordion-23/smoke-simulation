@@ -1,10 +1,12 @@
 #include <SDL3/SDL.h>
 #include <stdlib.h>
+#include <unistd.h> 
 #include "arena.h"
 #include "particle_system.h"
 
 #define SCREEN_WIDTH 800
 #define SCREEN_HEIGHT 600
+#define FPS 60
 
 void update_pixel_buffer(ParticleSystem* sys, uint32_t *pixels);
 
@@ -44,22 +46,24 @@ int main(void) {
                 goto quit;
         }
 
-        memset(pixels, 0, SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(uint32_t));
-
         PS_tick(&particle_sys, dt);
 
+        memset(pixels, 0, SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(uint32_t));
         update_pixel_buffer(&particle_sys, pixels);
 
         SDL_UpdateTexture(screen_texture, NULL, pixels, SCREEN_WIDTH * sizeof(uint32_t));
         SDL_RenderClear(renderer);
         SDL_RenderTexture(renderer, screen_texture, NULL, NULL);
         SDL_RenderPresent(renderer);
+
+        usleep(16 * 1000);
     }
 
 quit:
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();
+    arena_free(&arena);
 
     return 0;
 }
