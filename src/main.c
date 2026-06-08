@@ -1,12 +1,12 @@
 #include <SDL3/SDL.h>
 #include <stdlib.h>
-#include <unistd.h> 
+#include <unistd.h>
 #include "arena.h"
 #include "particle_system.h"
 
 #define SCREEN_WIDTH 800
 #define SCREEN_HEIGHT 600
-#define FPS 60
+#define MAX_PARTICLES 65536
 
 void update_pixel_buffer(ParticleSystem* sys, uint32_t *pixels);
 
@@ -21,9 +21,7 @@ int main(void) {
     }
 
     ParticleSystem particle_sys = { 0 };
-    PS_init(&particle_sys, &arena, 5000, SCREEN_WIDTH, SCREEN_HEIGHT);
-
-    PS_generate_random_particles(&particle_sys);
+    PS_init(&particle_sys, &arena, MAX_PARTICLES, SCREEN_WIDTH, SCREEN_HEIGHT);
 
     // TODO: wrap creation in if stmt
     SDL_Window *window;
@@ -46,6 +44,7 @@ int main(void) {
                 goto quit;
         }
 
+        PS_generate_random_particles(&particle_sys, dt);
         PS_tick(&particle_sys, dt);
 
         memset(pixels, 0, SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(uint32_t));
@@ -55,8 +54,6 @@ int main(void) {
         SDL_RenderClear(renderer);
         SDL_RenderTexture(renderer, screen_texture, NULL, NULL);
         SDL_RenderPresent(renderer);
-
-        usleep(16 * 1000);
     }
 
 quit:
