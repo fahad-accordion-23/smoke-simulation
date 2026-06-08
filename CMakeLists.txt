@@ -10,6 +10,7 @@ include_directories(src)
 
 set(SOURCES
     src/arena.c
+    src/particle_system.c
     src/main.c
 )
 

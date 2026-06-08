@@ -1,19 +1,12 @@
 #include <SDL3/SDL.h>
 #include <stdlib.h>
 #include "arena.h"
+#include "particle_system.h"
 
 #define SCREEN_WIDTH 800
 #define SCREEN_HEIGHT 600
 
-typedef struct {
-    float *x;
-    float *y;
-    float *vx;
-    float *vy;
-    size_t max_particles;
-} ParticleSystem;
-
-void init_particle_system(ParticleSystem *sys, Arena *arena, size_t num_particles);
+void update_pixel_buffer(ParticleSystem* sys, uint32_t *pixels);
 
 int main(void) {
     Arena arena = { 0 };
@@ -25,16 +18,10 @@ int main(void) {
         exit(-1);
     }
 
-    ParticleSystem particle_system = { 0 };
-    init_particle_system(&particle_system, &arena, 5000);
+    ParticleSystem particle_sys = { 0 };
+    PS_init(&particle_sys, &arena, 5000, SCREEN_WIDTH, SCREEN_HEIGHT);
 
-    for (size_t i = 0; i < particle_system.max_particles; i++) {
-        particle_system.x[i] = SCREEN_WIDTH / 2.0f;
-        particle_system.y[i] = SCREEN_HEIGHT - 50.0f;
-
-        particle_system.vx[i] = ((float) rand() / (float) RAND_MAX) * 30.0f - 15.0f;
-        particle_system.vy[i] = -((float) rand() / (float) RAND_MAX) * 60.0f - 20.0f;
-    }
+    PS_generate_random_particles(&particle_sys);
 
     // TODO: wrap creation in if stmt
     SDL_Window *window;
@@ -59,17 +46,9 @@ int main(void) {
 
         memset(pixels, 0, SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(uint32_t));
 
-        for (size_t i = 0; i < particle_system.max_particles; i++) {
-            particle_system.x[i] += particle_system.vx[i] * dt;
-            particle_system.y[i] += particle_system.vy[i] * dt;
+        PS_tick(&particle_sys, dt);
 
-            int px = (int)particle_system.x[i];
-            int py = (int)particle_system.y[i];
-
-            if (px >= 0 && px < SCREEN_WIDTH && py >= 0 && py < SCREEN_HEIGHT) {
-                pixels[py * SCREEN_WIDTH + px] = 0xFFFFFFFF;
-            }
-        }
+        update_pixel_buffer(&particle_sys, pixels);
 
         SDL_UpdateTexture(screen_texture, NULL, pixels, SCREEN_WIDTH * sizeof(uint32_t));
         SDL_RenderClear(renderer);
@@ -85,10 +64,13 @@ quit:
     return 0;
 }
 
-void init_particle_system(ParticleSystem *sys, Arena *arena, size_t num_particles) {
-    sys->max_particles = num_particles;
-    sys->x = arena_alloc(arena, sizeof(float), num_particles);
-    sys->y = arena_alloc(arena, sizeof(float), num_particles);
-    sys->vx = arena_alloc(arena, sizeof(float), num_particles);
-    sys->vy = arena_alloc(arena, sizeof(float), num_particles);
+void update_pixel_buffer(ParticleSystem* sys, uint32_t *pixels) {
+    for (size_t i = 0; i < sys->max_particles; i++) {
+        int px = (int)sys->x[i];
+        int py = (int)sys->y[i];
+
+        if (px >= 0 && px < sys->bound_x && py >= 0 && py < sys->bound_y) {
+            pixels[py * SCREEN_WIDTH + px] = 0xFFFFFFFF;
+        }
+    }
 }
