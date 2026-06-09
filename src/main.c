@@ -11,25 +11,42 @@
 void update_pixel_buffer(ParticleSystem* sys, uint32_t *pixels);
 
 int main(void) {
-    Arena arena = { 0 };
-    arena_init(&arena);
 
     if (!SDL_Init(SDL_INIT_VIDEO))
     {
         SDL_Log("Failed to initialize! Exitting.\n");
         exit(-1);
     }
+    
+    SDL_Window   *window;
+    SDL_Renderer *renderer;
+    if (!SDL_CreateWindowAndRenderer("Smoke Simulation",
+                                     SCREEN_WIDTH,
+                                     SCREEN_HEIGHT,
+                                     0,
+                                     &window,
+                                     &renderer)) {
+        SDL_Log("Failed to create window and/or renderer! Exiting.\n");
+        exit(-1);
+    }
+
+    Arena arena = { 0 };
+    arena_init(&arena);
 
     ParticleSystem particle_sys = { 0 };
     PS_init(&particle_sys, &arena, MAX_PARTICLES, SCREEN_WIDTH, SCREEN_HEIGHT);
 
-    // TODO: wrap creation in if stmt
-    SDL_Window *window;
-    SDL_Renderer *renderer;
-    SDL_CreateWindowAndRenderer("Smoke Simulation", SCREEN_WIDTH, SCREEN_HEIGHT, 0, &window, &renderer);
+    uint32_t *pixels;
+    pixels = (uint32_t*) arena_alloc(&arena,
+                                     sizeof(uint32_t),
+                                     SCREEN_WIDTH * SCREEN_HEIGHT);
 
-    uint32_t *pixels = (uint32_t*) arena_alloc(&arena, sizeof(uint32_t), SCREEN_WIDTH * SCREEN_HEIGHT);
-    SDL_Texture *screen_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, SCREEN_WIDTH, SCREEN_HEIGHT);
+    SDL_Texture *screen_texture;
+    screen_texture = SDL_CreateTexture(renderer,
+                                       SDL_PIXELFORMAT_RGBA8888,
+                                       SDL_TEXTUREACCESS_STREAMING,
+                                       SCREEN_WIDTH,
+                                       SCREEN_HEIGHT);
 
     Uint64 last_time = SDL_GetPerformanceCounter();
     SDL_Event event;

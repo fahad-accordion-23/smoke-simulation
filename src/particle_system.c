@@ -2,9 +2,20 @@
 #include <stdlib.h>
 #include <math.h>
 
+#define MIN_INITIAL_VEL_X -5.0f
+#define MAX_INITIAL_VEL_X +5.0f
+
+#define MIN_INITIAL_VEL_Y -5.0f
+#define MAX_INITIAL_VEL_Y -30.0f
+
 #define SPAWN_RATE 2048
 #define DRAG_MULTIPLIER 0.03f
-#define GRAVITY 9.81f
+#define GRAVITY +9.81f
+#define BUOYANCY -15.0f
+
+float f_generate_rand(float min, float max) {
+    return ((float) rand() / (float) RAND_MAX) * (max - min) + min;
+}
 
 void PS_init(ParticleSystem *sys, Arena *arena, size_t num_particles, int bound_x, int bound_y) {
     sys->max_particles = num_particles;
@@ -41,11 +52,11 @@ void PS_generate_random_particles(ParticleSystem *sys, float dt) {
     }
 
     for (size_t i = start_idx; i < final_idx; i++) {
-        sys->vx[i] = ((float) rand() / (float) RAND_MAX) * 30.0f - 15.0f;
+        sys->vx[i] = f_generate_rand(MIN_INITIAL_VEL_X, MAX_INITIAL_VEL_X);
     }
 
     for (size_t i = start_idx; i < final_idx; i++) {
-        sys->vy[i] = -((float) rand() / (float) RAND_MAX) * 90.0f - 45.0f;
+        sys->vy[i] = f_generate_rand(MIN_INITIAL_VEL_Y, MAX_INITIAL_VEL_Y);
     }
 
     for (size_t i = start_idx; i< final_idx; i++) {
@@ -67,7 +78,7 @@ void PS_tick(ParticleSystem *sys, float dt) {
         sys->vy[i] += GRAVITY * dt;
 
         // buoyancy
-        sys->vy[i] -= 15.0f * dt;
+        sys->vy[i] += BUOYANCY * dt;
     }
 
     for (size_t i = 0; i < sys->alive_particles; i++) {
@@ -107,8 +118,8 @@ void PS_tick(ParticleSystem *sys, float dt) {
         if (y < 0.0f || y >= sys->bound_y || x < 0.0f || x >= sys->bound_x) {
             sys->x[i] = (float) sys->bound_x / 2.0f;
             sys->y[i] = (float) sys->bound_y - 50.0f;
-            sys->vx[i] = ((float) rand() / (float) RAND_MAX) * 30.0f - 15.0f;
-            sys->vy[i] = -((float) rand() / (float) RAND_MAX) * 90.0f - 45.0f;
+            sys->vx[i] = f_generate_rand(MIN_INITIAL_VEL_X, MAX_INITIAL_VEL_X);
+            sys->vy[i] = f_generate_rand(MIN_INITIAL_VEL_Y, MAX_INITIAL_VEL_Y);
             sys->color[i].value = 0xFFFFFFFF;
         }
     }
