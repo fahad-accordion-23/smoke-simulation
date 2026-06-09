@@ -26,10 +26,29 @@ typedef struct {
     float accumulated_dt;
 
     // particles data
-    float *x;
-    float *y;
+
+    // mass not added because assuming uniform mass of all particles
+    // float *mass;
+
+    float *density;
+
+    float *pressure;
+
+    float *force_x;
+    float *force_y;
+
+    // acceleration
+    float *ax;
+    float *ay;
+
+    // velocity
     float *vx;
     float *vy;
+
+    // position
+    float *x;
+    float *y;
+
     Color *color;
 } ParticleSystem;
 
