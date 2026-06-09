@@ -66,7 +66,7 @@ quit:
 }
 
 void update_pixel_buffer(ParticleSystem* sys, uint32_t *pixels) {
-    for (size_t i = 0; i < sys->max_particles; i++) {
+    for (size_t i = 0; i < sys->alive_particles; i++) {
         int px = (int)sys->x[i];
         int py = (int)sys->y[i];
 

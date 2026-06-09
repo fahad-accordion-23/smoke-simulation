@@ -48,7 +48,7 @@ void PS_generate_random_particles(ParticleSystem *sys, float dt) {
 void PS_tick(ParticleSystem *sys, float dt) {
     // y calculations
 
-    for (size_t i = 0; i < sys->max_particles; i++) {
+    for (size_t i = 0; i < sys->alive_particles; i++) {
         /* air resistance */
         float drag_y = DRAG_MULTIPLIER * sys->vy[i] * fabsf(sys->vy[i]);
         sys->vy[i] += -drag_y * dt;
@@ -60,25 +60,25 @@ void PS_tick(ParticleSystem *sys, float dt) {
         sys->vy[i] -= 15.0f * dt;
     }
 
-    for (size_t i = 0; i < sys->max_particles; i++) {
+    for (size_t i = 0; i < sys->alive_particles; i++) {
         sys->y[i] += sys->vy[i] * dt;
     }
 
     // x calculations
 
-    for (size_t i = 0; i < sys->max_particles; i++) {
+    for (size_t i = 0; i < sys->alive_particles; i++) {
         /* air resistance */
         float drag_x = DRAG_MULTIPLIER * sys->vx[i] * fabsf(sys->vx[i]);
         sys->vx[i] += -drag_x * dt;
     }
 
-    for (size_t i = 0; i < sys->max_particles; i++) {
+    for (size_t i = 0; i < sys->alive_particles; i++) {
         sys->x[i] += sys->vx[i] * dt;
     }
 
     // respawn check
 
-    for (size_t i = 0; i < sys->max_particles; i++) {
+    for (size_t i = 0; i < sys->alive_particles; i++) {
         float y = sys->y[i];
         float x = sys->x[i];
 
