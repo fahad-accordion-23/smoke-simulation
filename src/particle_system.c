@@ -23,6 +23,10 @@ void PS_generate_random_particles(ParticleSystem *sys, float dt) {
         return; 
 
     size_t batch_size = (size_t) ((float) SPAWN_RATE * dt);
+
+    if (sys->alive_particles + batch_size > sys->max_particles)
+        batch_size = sys->max_particles - sys->alive_particles;
+
     size_t start_idx = sys->alive_particles;
     size_t final_idx = sys->alive_particles + batch_size;
 
