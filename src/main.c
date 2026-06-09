@@ -71,7 +71,7 @@ void update_pixel_buffer(ParticleSystem* sys, uint32_t *pixels) {
         int py = (int)sys->y[i];
 
         if (px >= 0 && px < sys->bound_x && py >= 0 && py < sys->bound_y) {
-            pixels[py * SCREEN_WIDTH + px] = 0xFFFFFFFF;
+            pixels[py * SCREEN_WIDTH + px] = sys->color[i].value;
         }
     }
 }

@@ -1,7 +1,6 @@
 #include "particle_system.h"
 #include <stdlib.h>
 #include <math.h>
-#include <stdio.h>
 
 #define SPAWN_RATE 2048
 #define DRAG_MULTIPLIER 0.03f
@@ -10,12 +9,15 @@
 void PS_init(ParticleSystem *sys, Arena *arena, size_t num_particles, int bound_x, int bound_y) {
     sys->max_particles = num_particles;
     sys->alive_particles = 0;
+    sys->bound_x = bound_x;
+    sys->bound_y = bound_y;
+    sys->accumulated_dt = 0.0f;
+
     sys->x = arena_alloc(arena, sizeof(float), num_particles);
     sys->y = arena_alloc(arena, sizeof(float), num_particles);
     sys->vx = arena_alloc(arena, sizeof(float), num_particles);
     sys->vy = arena_alloc(arena, sizeof(float), num_particles);
-    sys->bound_x = bound_x;
-    sys->bound_y = bound_y;
+    sys->color = arena_alloc(arena, sizeof(Color), num_particles);
 }
 
 void PS_generate_random_particles(ParticleSystem *sys, float dt) {
@@ -46,21 +48,25 @@ void PS_generate_random_particles(ParticleSystem *sys, float dt) {
         sys->vy[i] = -((float) rand() / (float) RAND_MAX) * 90.0f - 45.0f;
     }
 
+    for (size_t i = start_idx; i< final_idx; i++) {
+        sys->color[i].value = 0xFFFFFFFF;
+    }
+
     sys->alive_particles += batch_size;
 }
 
 void PS_tick(ParticleSystem *sys, float dt) {
-    // y calculations
+    /* y calculations */
 
     for (size_t i = 0; i < sys->alive_particles; i++) {
-        /* air resistance */
+        // air resistance
         float drag_y = DRAG_MULTIPLIER * sys->vy[i] * fabsf(sys->vy[i]);
         sys->vy[i] += -drag_y * dt;
 
-        /* gravity */
+        // gravity
         sys->vy[i] += GRAVITY * dt;
 
-        /* buoyancy */
+        // buoyancy
         sys->vy[i] -= 15.0f * dt;
     }
 
@@ -68,7 +74,7 @@ void PS_tick(ParticleSystem *sys, float dt) {
         sys->y[i] += sys->vy[i] * dt;
     }
 
-    // x calculations
+    /* x calculations */
 
     for (size_t i = 0; i < sys->alive_particles; i++) {
         /* air resistance */
@@ -80,8 +86,20 @@ void PS_tick(ParticleSystem *sys, float dt) {
         sys->x[i] += sys->vx[i] * dt;
     }
 
-    // respawn check
+    // color calculations
+    sys->accumulated_dt += dt;
+    if (sys->accumulated_dt > 0.1f)
+    {
+        sys->accumulated_dt = 0.0f;
 
+        for (size_t i = 0; i < sys->alive_particles; i++) {
+            if (sys->color[i]._color.a > 0)
+                sys->color[i]._color.a -= 1;
+        }
+    }
+    
+
+    // respawn check
     for (size_t i = 0; i < sys->alive_particles; i++) {
         float y = sys->y[i];
         float x = sys->x[i];
@@ -91,6 +109,7 @@ void PS_tick(ParticleSystem *sys, float dt) {
             sys->y[i] = (float) sys->bound_y - 50.0f;
             sys->vx[i] = ((float) rand() / (float) RAND_MAX) * 30.0f - 15.0f;
             sys->vy[i] = -((float) rand() / (float) RAND_MAX) * 90.0f - 45.0f;
+            sys->color[i].value = 0xFFFFFFFF;
         }
     }
 }
