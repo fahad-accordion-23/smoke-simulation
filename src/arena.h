@@ -3,10 +3,16 @@
 
 #include <stddef.h>
 
-typedef struct {
-    void *mem_arena;
+typedef struct ArenaPage {
+    void   *memory;
     size_t offset;
 
+    struct ArenaPage *next_page;
+} ArenaPage;
+
+typedef struct {
+    ArenaPage *first_page;
+    ArenaPage *last_page;
 } Arena;
 
 void arena_init(Arena *arena);
