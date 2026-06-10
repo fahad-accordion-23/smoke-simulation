@@ -6,6 +6,11 @@
 #include "arena.h"
 
 typedef struct {
+    float x;
+    float y;
+} Vector2f;
+
+typedef struct {
     uint8_t a;
     uint8_t b;
     uint8_t g;
@@ -23,7 +28,6 @@ typedef struct {
     size_t alive_particles;
     int bound_x;
     int bound_y;
-    float accumulated_dt;
 
     // particles data
 
@@ -31,23 +35,12 @@ typedef struct {
     // float *mass;
 
     float *density;
-
     float *pressure;
 
-    float *fx;
-    float *fy;
-
-    // acceleration
-    float *ax;
-    float *ay;
-
-    // velocity
-    float *vx;
-    float *vy;
-
-    // position
-    float *x;
-    float *y;
+    Vector2f *force;
+    Vector2f *acc;
+    Vector2f *vel;
+    Vector2f *pos;
 
     Color *color;
 } ParticleSystem;

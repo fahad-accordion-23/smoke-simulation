@@ -32,9 +32,9 @@ float f_generate_rand(float min, float max) {
     return ((float) rand() / (float) RAND_MAX) * (max - min) + min;
 }
 
-float get_dist_squared(float x, float x_j, float y, float y_j) {
-    float dx = x - x_j;
-    float dy = y - y_j;
+float get_dist_squared(Vector2f r_i, Vector2f r_j) {
+    float dx = r_i.x - r_j.x;
+    float dy = r_i.y - r_j.y;
 
     return dx * dx + dy * dy;
 }
@@ -46,8 +46,8 @@ float get_diff(float dist_squared) {
     return CUTOFF_DISTANCE_SQUARED - dist_squared;
 }
 
-float poly6_kernel(float x, float x_j, float y, float y_j) {
-    float dist_squared = get_dist_squared(x, x_j, y, y_j);
+float poly6_kernel(Vector2f r_i, Vector2f r_j) {
+    float dist_squared = get_dist_squared(r_i, r_j);
     float diff         = get_diff(dist_squared);
 
     return POLY6_CONSTANT * diff * diff * diff;
@@ -58,19 +58,14 @@ void PS_init(ParticleSystem *sys, Arena *arena, size_t num_particles, int bound_
     sys->alive_particles = 0;
     sys->bound_x         = bound_x;
     sys->bound_y         = bound_y;
-    sys->accumulated_dt  = 0.0f;
 
-    sys->density   = arena_alloc(arena, sizeof(float), num_particles);
-    sys->pressure  = arena_alloc(arena, sizeof(float), num_particles);
-    sys->fx        = arena_alloc(arena, sizeof(float), num_particles);
-    sys->fy        = arena_alloc(arena, sizeof(float), num_particles);
-    sys->ax        = arena_alloc(arena, sizeof(float), num_particles);
-    sys->ay        = arena_alloc(arena, sizeof(float), num_particles);
-    sys->vx        = arena_alloc(arena, sizeof(float), num_particles);
-    sys->vy        = arena_alloc(arena, sizeof(float), num_particles);
-    sys->x         = arena_alloc(arena, sizeof(float), num_particles);
-    sys->y         = arena_alloc(arena, sizeof(float), num_particles);
-    sys->color     = arena_alloc(arena, sizeof(Color), num_particles);
+    sys->density   = arena_alloc(arena, sizeof(float)   , num_particles);
+    sys->pressure  = arena_alloc(arena, sizeof(float)   , num_particles);
+    sys->force     = arena_alloc(arena, sizeof(Vector2f), num_particles);
+    sys->acc       = arena_alloc(arena, sizeof(Vector2f), num_particles);
+    sys->vel       = arena_alloc(arena, sizeof(Vector2f), num_particles);
+    sys->pos       = arena_alloc(arena, sizeof(Vector2f), num_particles);
+    sys->color     = arena_alloc(arena, sizeof(Color)   , num_particles);
 
     memset(sys->density, 0, sizeof(float) * num_particles);
 }
@@ -88,11 +83,8 @@ void PS_generate_random_particles(ParticleSystem *sys, float dt) {
     size_t final_idx = sys->alive_particles + batch_size;
 
     for (size_t i = start_idx; i < final_idx; i++) {
-        sys->x[i] = (float) sys->bound_x / 2.0f + f_generate_rand(-12.5f, 12.5f);
-    }
-
-    for (size_t i = start_idx; i < final_idx; i++) {
-        sys->y[i] = (float) sys->bound_y / 2.0f + f_generate_rand(-12.5f, 12.5f);
+        sys->pos[i].x = (float) sys->bound_x / 2.0f + f_generate_rand(-12.5f, 12.5f);
+        sys->pos[i].y = (float) sys->bound_y / 2.0f + f_generate_rand(-12.5f, 12.5f);
     }
 
     for (size_t i = start_idx; i< final_idx; i++) {
@@ -103,16 +95,15 @@ void PS_generate_random_particles(ParticleSystem *sys, float dt) {
 }
 
 void PS_tick(ParticleSystem *sys, float dt) {
-    // calculating densities
-    memset(sys->density, 0, sizeof(float) * sys->max_particles);
-    memset(sys->ax, 0, sizeof(float) * sys->max_particles);
-    memset(sys->ay, 0, sizeof(float) * sys->max_particles);
+    memset(sys->density, 0, sizeof(float)    * sys->max_particles);
+    memset(sys->acc    , 0, sizeof(Vector2f) * sys->max_particles);
 
+    // calculating densities
     for (size_t i = 0; i < sys->alive_particles; i++) {
         float density = 0;
 
         for (size_t j = 0; j < sys->alive_particles; j++) {
-            float weight = poly6_kernel(sys->x[i], sys->x[j], sys->y[i], sys->y[j]);
+            float weight = poly6_kernel(sys->pos[i], sys->pos[j]);
             density += PARTICLE_MASS * weight;
         }
 
@@ -124,15 +115,24 @@ void PS_tick(ParticleSystem *sys, float dt) {
         sys->pressure[i] = (SPEED_SOUND * SPEED_SOUND) * (sys->density[i] - FLUID_DENSITY);
     }
 
-    // acceleration due to pressure
+    // calculating accelerations
     for (size_t i = 0; i < sys->alive_particles; i++) {
+        float density_i         = sys->density[i];
+        float density_i_squared = density_i * density_i;
+
+        Vector2f pos_i          = sys->pos[i];
+        Vector2f acc_i          = { 0 };
+
         for (size_t j = 0; j < sys->alive_particles; j++) {
             if (i == j)
                 continue;
 
-            float density_i_squared = sys->density[i] * sys->density[i];
-            float density_j_squared = sys->density[j] * sys->density[j];
-            float dist_squared      = get_dist_squared(sys->x[i], sys->x[j], sys->y[i], sys->y[j]);
+            float density_j         = sys->density[j];
+            float density_j_squared = density_j * density_j;
+
+            Vector2f pos_j          = sys->pos[j];
+
+            float dist_squared      = get_dist_squared(pos_i, pos_j);
             float diff              = get_diff(dist_squared);
 
             // acceleration due to pressure
@@ -140,51 +140,53 @@ void PS_tick(ParticleSystem *sys, float dt) {
                 float term_l = sys->pressure[i] / density_i_squared;
                 float term_r = sys->pressure[j] / density_j_squared;
 
-                float P_ij = -(PARTICLE_MASS / sys->density[j]) * (term_l + term_r);
+                float P_ij = -(PARTICLE_MASS / density_j) * (term_l + term_r);
 
-                float gradient_x = POLY6_CONSTANT * (-6.0f * diff * diff * (sys->x[i] - sys->x[j]));
-                float gradient_y = POLY6_CONSTANT * (-6.0f * diff * diff * (sys->y[i] - sys->y[j]));
+                float gradient_x = POLY6_CONSTANT * (-6.0f * diff * diff * (pos_i.x - pos_j.x));
+                float gradient_y = POLY6_CONSTANT * (-6.0f * diff * diff * (pos_i.y - pos_j.y));
 
-                sys->ax[i] += P_ij * gradient_x;
-                sys->ay[i] += P_ij * gradient_y;
+                acc_i.x += P_ij * gradient_x;
+                acc_i.y += P_ij * gradient_y;
             }
 
             // acceleration due to viscosity
             {
-                float term_l_x = sys->vx[i] / density_i_squared; 
-                float term_r_x = sys->vx[j] / density_j_squared;
+                Vector2f term_l;
+                term_l.x = sys->vel[i].x / density_i_squared;
+                term_l.y = sys->vel[i].y / density_i_squared;
 
-                float V_ij_x = -VISCOSITY * (PARTICLE_MASS / sys->density[j]) * (term_l_x + term_r_x);
+                Vector2f term_r;
+                term_r.x = sys->vel[j].x / density_j_squared;
+                term_r.y = sys->vel[j].y / density_j_squared;
 
-                float term_l_y = sys->vy[i] / density_i_squared;
-                float term_r_y = sys->vy[j] / density_j_squared;
-
-                float V_ij_y = -VISCOSITY * (PARTICLE_MASS / sys->density[j]) * (term_l_y + term_r_y);
+                Vector2f V_ij;
+                V_ij.x = -VISCOSITY * (PARTICLE_MASS / sys->density[j]) * (term_l.x + term_r.x);
+                V_ij.y = -VISCOSITY * (PARTICLE_MASS / sys->density[j]) * (term_l.y + term_r.y);
 
                 float laplacian = POLY6_CONSTANT * (24.0f * dist_squared * diff - 12.0f * diff * diff);
 
-                sys->ax[i] += V_ij_x * laplacian;
-                sys->ay[i] += V_ij_y * laplacian;
+                acc_i.x += V_ij.x * laplacian;
+                acc_i.y += V_ij.y * laplacian;
             }
         }
 
         // acceleration due to external forces
-        sys->ax[i] += (1.0f / sys->density[i]) * sys->fx[i];
-        sys->ay[i] += (1.0f / sys->density[i]) * sys->fy[i];
+        acc_i.x += (1.0f / density_i) * sys->force[i].x;
+        acc_i.y += (1.0f / density_i) * sys->force[i].y;
 
         // acceleration due to gravity
-        sys->ay[i] += GRAVITY;
-    }
- 
-    for (size_t i = 0; i < sys->alive_particles; i++) {
-        sys->vx[i] += sys->ax[i] * dt;
-        sys->x[i]  += sys->vx[i] * dt;
+        acc_i.y += GRAVITY;
+
+        sys->acc[i] = acc_i;
     }
 
     for (size_t i = 0; i < sys->alive_particles; i++) {
-        sys->vy[i] += sys->ay[i] * dt;
-        sys->y[i]  += sys->vy[i] * dt;
+        sys->vel[i].x += sys->acc[i].x * dt;
+        sys->vel[i].y += sys->acc[i].y * dt;
     }
+
+    for (size_t i = 0; i < sys->alive_particles; i++) {
+        sys->pos[i].x += sys->vel[i].x * dt;
+        sys->pos[i].y += sys->vel[i].y * dt;
+   }
 }
-
-
