@@ -34,8 +34,8 @@ typedef struct {
 
     float *pressure;
 
-    float *force_x;
-    float *force_y;
+    float *fx;
+    float *fy;
 
     // acceleration
     float *ax;

@@ -6,7 +6,7 @@
 
 #define SCREEN_WIDTH 800
 #define SCREEN_HEIGHT 600
-#define MAX_PARTICLES 65536
+#define MAX_PARTICLES 400
 
 void update_pixel_buffer(ParticleSystem* sys, uint32_t *pixels);
 
