@@ -32,7 +32,7 @@ float f_generate_rand (float min, float max);
 float get_dist_squared(Vector2f r_i, Vector2f r_j);
 float get_diff        (float dist_squared);
 float poly6_kernel    (Vector2f r_i, Vector2f r_j);
-size_t get_cell_index(Vector2f position, Vector2i cell_dimensions, size_t cell_cols);
+size_t get_cell_index (Vector2f position, Vector2i cell_dimensions, size_t cell_cols);
 
 void sort_particles         (ParticleSystem *sys);
 void calculate_densities    (ParticleSystem *sys);
@@ -91,8 +91,8 @@ void PS_init(ParticleSystem *sys,
 
 void PS_generate_random_particles(ParticleSystem *sys) {
     for (size_t i = 0; i < sys->max_particles; i++) {
-        sys->pos[i].x = (float) sys->dimensions.x / 2.0f + f_generate_rand(-12.5f, 12.5f);
-        sys->pos[i].y = (float) sys->dimensions.y / 2.0f + f_generate_rand(-12.5f, 12.5f);
+        sys->pos[i].x = (float) sys->dimensions.x / 2.0f + f_generate_rand(-300.0f, 300.0f);
+        sys->pos[i].y = (float) sys->dimensions.y / 2.0f + f_generate_rand(-200.0f, 200.0f);
     }
 
     for (size_t i = 0; i < sys->max_particles; i++) {
@@ -204,12 +204,41 @@ void sort_particles(ParticleSystem *sys) {
 void calculate_densities(ParticleSystem *sys) {
     memset(sys->density, 0, sizeof(float)    * sys->max_particles);
 
-    for (size_t i = 0; i < sys->max_particles; i++) {
+    size_t max_particles     = sys->max_particles;
+    Vector2i cell_dimensions = sys->cell_dimensions;
+    size_t cell_rows         = sys->cell_rows;
+    size_t cell_cols         = sys->cell_cols;
+
+    for (size_t i = 0; i < max_particles; i++) {
+        Vector2f pos_i      = sys->pos[i];
         float density = 0;
 
-        for (size_t j = 0; j < sys->max_particles; j++) {
-            float weight = poly6_kernel(sys->pos[i], sys->pos[j]);
-            density += PARTICLE_MASS * weight;
+        int cell_x = (int) pos_i.x / cell_dimensions.x;
+        int cell_y = (int) pos_i.y / cell_dimensions.y;
+
+        for (int dx = -1; dx <= 1; dx++) {
+            int neighbour_x = cell_x + dx;
+
+            if (neighbour_x < 0 || (size_t) neighbour_x >= cell_cols)
+                continue;
+
+            for (int dy = -1; dy <= 1; dy++) {
+                int neighbour_y = cell_y + dy;
+                
+                if (neighbour_y < 0 || (size_t) neighbour_y >= cell_rows)
+                    continue;
+
+                size_t bin_index = (size_t) neighbour_y * cell_cols + (size_t) neighbour_x;
+                Bin    *bin      = &sys->bin[bin_index];
+
+                size_t start_idx = bin->start_index;
+                size_t final_idx = bin->start_index + bin->count;
+
+                for (size_t j = start_idx; j < final_idx; j++) {
+                    float weight = poly6_kernel(sys->pos[i], sys->pos[j]);
+                    density += PARTICLE_MASS * weight;
+                }
+            }
         }
 
         sys->density[i] = density;
@@ -223,7 +252,13 @@ void calculate_pressures(ParticleSystem *sys) {
 }
 
 void calculate_accelerations(ParticleSystem *sys) {
-    for (size_t i = 0; i < sys->max_particles; i++) {
+    size_t max_particles     = sys->max_particles;
+    Vector2i cell_dimensions = sys->cell_dimensions;
+    size_t cell_rows         = sys->cell_rows;
+    size_t cell_cols         = sys->cell_cols;
+
+    for (size_t i = 0; i < max_particles; i++) {
+
         float    density_i  = sys->density[i];
         float    pressure_i = sys->pressure[i];
         Vector2f acc_i      = { 0 };
@@ -232,56 +267,78 @@ void calculate_accelerations(ParticleSystem *sys) {
 
         float density_i_squared = density_i * density_i;
 
-        for (size_t j = 0; j < sys->max_particles; j++) {
-            if (i == j)
+        int cell_x = (int) pos_i.x / cell_dimensions.x;
+        int cell_y = (int) pos_i.y / cell_dimensions.y;
+
+        for (int dx = -1; dx <= 1; dx++) {
+            int neighbour_x = cell_x + dx;
+
+            if (neighbour_x < 0 || (size_t) neighbour_x >= cell_cols)
                 continue;
 
-            float    density_j  = sys->density[j];
-            float    pressure_j = sys->pressure[j];
-            Vector2f vel_j      = sys->vel[j];
-            Vector2f pos_j      = sys->pos[j];
+            for (int dy = -1; dy <= 1; dy++) {
+                int neighbour_y = cell_y + dy;
+                
+                if (neighbour_y < 0 || (size_t) neighbour_y >= cell_rows)
+                    continue;
 
-            float density_j_squared = density_j * density_j;
-            float dist_squared      = get_dist_squared(pos_i, pos_j);
-            float diff              = get_diff(dist_squared);
+                size_t bin_index = (size_t) neighbour_y * cell_cols + (size_t) neighbour_x;
+                Bin    *bin      = &sys->bin[bin_index];
 
-            // acceleration due to pressure
-            {
-                float term_l = pressure_i / density_i_squared;
-                float term_r = pressure_j / density_j_squared;
+                size_t start_idx = bin->start_index;
+                size_t final_idx = bin->start_index + bin->count;
 
-                float P_ij = -(PARTICLE_MASS / density_j) * (term_l + term_r);
+                for (size_t j = start_idx; j < final_idx; j++) {
+                    if (i == j)
+                        continue;
 
-                float gradient_x = POLY6_CONSTANT * (-6.0f * diff * diff * (pos_i.x - pos_j.x));
-                float gradient_y = POLY6_CONSTANT * (-6.0f * diff * diff * (pos_i.y - pos_j.y));
+                    float    density_j  = sys->density[j];
+                    float    pressure_j = sys->pressure[j];
+                    Vector2f vel_j      = sys->vel[j];
+                    Vector2f pos_j      = sys->pos[j];
 
-                acc_i.x += P_ij * gradient_x;
-                acc_i.y += P_ij * gradient_y;
-            }
+                    float density_j_squared = density_j * density_j;
+                    float dist_squared      = get_dist_squared(pos_i, pos_j);
+                    float diff              = get_diff(dist_squared);
 
-            // acceleration due to viscosity
-            {
-                Vector2f term_l;
-                term_l.x = vel_i.x / density_i_squared;
-                term_l.y = vel_i.y / density_i_squared;
+                    // acceleration due to pressure
+                    {
+                        float term_l = pressure_i / density_i_squared;
+                        float term_r = pressure_j / density_j_squared;
 
-                Vector2f term_r;
-                term_r.x = vel_j.x / density_j_squared;
-                term_r.y = vel_j.y / density_j_squared;
+                        float P_ij = -(PARTICLE_MASS / density_j) * (term_l + term_r);
 
-                Vector2f V_ij;
-                V_ij.x = -VISCOSITY * (PARTICLE_MASS / density_j) * (term_l.x + term_r.x);
-                V_ij.y = -VISCOSITY * (PARTICLE_MASS / density_j) * (term_l.y + term_r.y);
+                        float gradient_x = POLY6_CONSTANT * (-6.0f * diff * diff * (pos_i.x - pos_j.x));
+                        float gradient_y = POLY6_CONSTANT * (-6.0f * diff * diff * (pos_i.y - pos_j.y));
 
-                float laplacian;
-                laplacian = POLY6_CONSTANT * (24.0f * dist_squared * diff - 12.0f * diff * diff);
+                        acc_i.x += P_ij * gradient_x;
+                        acc_i.y += P_ij * gradient_y;
+                    }
 
-                acc_i.x += V_ij.x * laplacian;
-                acc_i.y += V_ij.y * laplacian;
+                    // acceleration due to viscosity
+                    {
+                        Vector2f term_l;
+                        term_l.x = vel_i.x / density_i_squared;
+                        term_l.y = vel_i.y / density_i_squared;
+
+                        Vector2f term_r;
+                        term_r.x = vel_j.x / density_j_squared;
+                        term_r.y = vel_j.y / density_j_squared;
+
+                        Vector2f V_ij;
+                        V_ij.x = -VISCOSITY * (PARTICLE_MASS / density_j) * (term_l.x + term_r.x);
+                        V_ij.y = -VISCOSITY * (PARTICLE_MASS / density_j) * (term_l.y + term_r.y);
+
+                        float laplacian;
+                        laplacian = POLY6_CONSTANT * (24.0f * dist_squared * diff - 12.0f * diff * diff);
+
+                        acc_i.x += V_ij.x * laplacian;
+                        acc_i.y += V_ij.y * laplacian;
+                    }
+                }
             }
         }
 
-        // acceleration due to external forces
         acc_i.x += (1.0f / density_i) * sys->force[i].x;
         acc_i.y += (1.0f / density_i) * sys->force[i].y;
 
