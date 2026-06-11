@@ -26,6 +26,7 @@ typedef struct {
     // properties of the system
     size_t max_particles;
     size_t alive_particles;
+
     int bound_x;
     int bound_y;
 
