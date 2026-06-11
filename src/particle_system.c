@@ -32,7 +32,9 @@ float f_generate_rand (float min, float max);
 float get_dist_squared(Vector2f r_i, Vector2f r_j);
 float get_diff        (float dist_squared);
 float poly6_kernel    (Vector2f r_i, Vector2f r_j);
+size_t get_cell_index(Vector2f position, Vector2i cell_dimensions, size_t cell_cols);
 
+void sort_particles         (ParticleSystem *sys);
 void calculate_densities    (ParticleSystem *sys);
 void calculate_pressures    (ParticleSystem *sys);
 void calculate_accelerations(ParticleSystem *sys);
@@ -41,56 +43,73 @@ void calculate_positions    (ParticleSystem *sys, float dt);
 
 /* ACTUAL IMPLEMENTATION */
 
-void PS_init(ParticleSystem *sys, Arena *arena, size_t num_particles, int bound_x, int bound_y) {
-    sys->max_particles   = num_particles;
-    sys->alive_particles = 0;
-    sys->bound_x         = bound_x;
-    sys->bound_y         = bound_y;
+void PS_init(ParticleSystem *sys,
+             Arena *arena,
+             size_t max_particles,
+             Vector2i dimensions,
+             Vector2i cell_dimensions) {
 
-    sys->density  = arena_alloc(arena, sizeof(float)   , num_particles);
-    sys->pressure = arena_alloc(arena, sizeof(float)   , num_particles);
-    sys->force    = arena_alloc(arena, sizeof(Vector2f), num_particles);
-    sys->acc      = arena_alloc(arena, sizeof(Vector2f), num_particles);
-    sys->vel      = arena_alloc(arena, sizeof(Vector2f), num_particles);
-    sys->pos      = arena_alloc(arena, sizeof(Vector2f), num_particles);
-    sys->color    = arena_alloc(arena, sizeof(Color)   , num_particles);
+    sys->max_particles   = max_particles;
 
-    memset(sys->density, 0, sizeof(float)    * num_particles);
-    memset(sys->force  , 0, sizeof(Vector2f) * num_particles);
-    memset(sys->vel    , 0, sizeof(Vector2f) * num_particles);
+    sys->dimensions = dimensions;
+
+    sys->cell_dimensions = cell_dimensions;
+
+    sys->cell_cols = (size_t) (dimensions.x / cell_dimensions.x);
+    sys->cell_rows = (size_t) (dimensions.y / cell_dimensions.y);
+
+    sys->bin = arena_alloc(arena, sizeof(Bin), sys->cell_rows * sys->cell_cols);
+
+    sys->density = arena_alloc(arena, sizeof(float), max_particles);
+
+    sys->pressure = arena_alloc(arena, sizeof(float), max_particles);
+
+    sys->force   = arena_alloc(arena, sizeof(Vector2f), max_particles);
+    sys->force_s = arena_alloc(arena, sizeof(Vector2f), max_particles);
+
+    sys->acc = arena_alloc(arena, sizeof(Vector2f), max_particles);
+
+    sys->vel   = arena_alloc(arena, sizeof(Vector2f), max_particles);
+    sys->vel_s = arena_alloc(arena, sizeof(Vector2f), max_particles);
+
+    sys->pos   = arena_alloc(arena, sizeof(Vector2f), max_particles);
+    sys->pos_s = arena_alloc(arena, sizeof(Vector2f), max_particles);
+
+    sys->color   = arena_alloc(arena, sizeof(Color), max_particles);
+    sys->color_s = arena_alloc(arena, sizeof(Color), max_particles);
+
+    memset(sys->density, 0, sizeof(float) * max_particles);
+
+    memset(sys->force  , 0, sizeof(Vector2f) * max_particles);
+    memset(sys->force_s, 0, sizeof(Vector2f) * max_particles);
+
+    memset(sys->vel   , 0, sizeof(Vector2f) * max_particles);
+    memset(sys->vel_s , 0, sizeof(Vector2f) * max_particles);
+
+    memset(sys->bin, 0, sizeof(Bin) * sys->cell_rows * sys->cell_cols);
 }
 
-void PS_generate_random_particles(ParticleSystem *sys, float dt) {
-    if (sys->alive_particles >= sys->max_particles)
-        return; 
-
-    size_t batch_size = (size_t) ((float) SPAWN_RATE * dt);
-
-    if (sys->alive_particles + batch_size > sys->max_particles)
-        batch_size = sys->max_particles - sys->alive_particles;
-
-    size_t start_idx = sys->alive_particles;
-    size_t final_idx = sys->alive_particles + batch_size;
-
-    for (size_t i = start_idx; i < final_idx; i++) {
-        sys->pos[i].x = (float) sys->bound_x / 2.0f + f_generate_rand(-12.5f, 12.5f);
-        sys->pos[i].y = (float) sys->bound_y / 2.0f + f_generate_rand(-12.5f, 12.5f);
+void PS_generate_random_particles(ParticleSystem *sys) {
+    for (size_t i = 0; i < sys->max_particles; i++) {
+        sys->pos[i].x = (float) sys->dimensions.x / 2.0f + f_generate_rand(-12.5f, 12.5f);
+        sys->pos[i].y = (float) sys->dimensions.y / 2.0f + f_generate_rand(-12.5f, 12.5f);
     }
 
-    for (size_t i = start_idx; i< final_idx; i++) {
+    for (size_t i = 0; i < sys->max_particles; i++) {
         sys->color[i].value = 0xFFFFFFFF;
     }
-
-    sys->alive_particles += batch_size;
 }
 
 void PS_tick(ParticleSystem *sys, float dt) {
+    sort_particles(sys);
     calculate_densities(sys);
     calculate_pressures(sys);
     calculate_accelerations(sys);
     calculate_velocities(sys, dt);
     calculate_positions(sys, dt);
 }
+
+/* HELPERS IMPLEMENTATION */
 
 float f_generate_rand(float min, float max) {
     return ((float) rand() / (float) RAND_MAX) * (max - min) + min;
@@ -117,13 +136,78 @@ float poly6_kernel(Vector2f r_i, Vector2f r_j) {
     return POLY6_CONSTANT * diff * diff * diff;
 }
 
+size_t get_cell_index(Vector2f position, Vector2i cell_dimensions, size_t cell_cols) {
+    size_t index;
+
+    index  = (size_t) ((int) position.y / cell_dimensions.y) * cell_cols;
+    index += (size_t) ((int) position.x / cell_dimensions.x);
+
+    return index;
+}
+
+void sort_particles(ParticleSystem *sys) {
+    size_t   max_particles   = sys->max_particles;
+    Vector2i cell_dimensions = sys->cell_dimensions;
+    size_t   cell_rows       = sys->cell_rows;
+    size_t   cell_cols       = sys->cell_cols;
+
+    memset(sys->bin, 0, sizeof(Bin) * cell_cols * cell_rows);
+
+    // counting the particles
+    for (size_t i = 0; i < max_particles; i++) {
+        size_t bin_index = get_cell_index(sys->pos[i], cell_dimensions, cell_cols);
+
+        sys->bin[bin_index].start_index += 1;
+        sys->bin[bin_index].count       += 1;
+    }
+
+    // prefix sum calculation
+    for (size_t i = 1; i < cell_rows * cell_cols; i++) {
+        sys->bin[i].start_index += sys->bin[i - 1].start_index;
+    }
+
+    // sorting
+    for (size_t i = 0; i < max_particles; i++) {
+
+        size_t bin_index = get_cell_index(sys->pos[i], cell_dimensions, cell_cols);
+        Bin    *bin      = &sys->bin[bin_index];
+
+        size_t new_index = bin->start_index - 1;
+
+        sys->force_s[new_index] = sys->force[i];
+        sys->vel_s  [new_index] = sys->vel  [i];
+        sys->pos_s  [new_index] = sys->pos  [i];
+        sys->color_s[new_index] = sys->color[i];
+
+        bin->start_index -= 1;
+    }
+
+    void *temp; 
+
+    temp         = (void*) sys->force;
+    sys->force   = sys->force_s;
+    sys->force_s = (Vector2f*) temp;
+
+    temp       = (void*) sys->vel;
+    sys->vel   = sys->vel_s;
+    sys->vel_s = (Vector2f*) temp;
+
+    temp       = (void*) sys->pos;
+    sys->pos   = sys->pos_s;
+    sys->pos_s = (Vector2f*) temp;
+
+    temp         = (void*) sys->color;
+    sys->color   = sys->color_s;
+    sys->color_s = (Color*) temp;
+}
+
 void calculate_densities(ParticleSystem *sys) {
     memset(sys->density, 0, sizeof(float)    * sys->max_particles);
 
-    for (size_t i = 0; i < sys->alive_particles; i++) {
+    for (size_t i = 0; i < sys->max_particles; i++) {
         float density = 0;
 
-        for (size_t j = 0; j < sys->alive_particles; j++) {
+        for (size_t j = 0; j < sys->max_particles; j++) {
             float weight = poly6_kernel(sys->pos[i], sys->pos[j]);
             density += PARTICLE_MASS * weight;
         }
@@ -133,13 +217,13 @@ void calculate_densities(ParticleSystem *sys) {
 }
 
 void calculate_pressures(ParticleSystem *sys) {
-    for (size_t i = 0; i < sys->alive_particles; i++) {
+    for (size_t i = 0; i < sys->max_particles; i++) {
         sys->pressure[i] = (SPEED_SOUND * SPEED_SOUND) * (sys->density[i] - FLUID_DENSITY);
     }
 }
 
 void calculate_accelerations(ParticleSystem *sys) {
-    for (size_t i = 0; i < sys->alive_particles; i++) {
+    for (size_t i = 0; i < sys->max_particles; i++) {
         float    density_i  = sys->density[i];
         float    pressure_i = sys->pressure[i];
         Vector2f acc_i      = { 0 };
@@ -148,7 +232,7 @@ void calculate_accelerations(ParticleSystem *sys) {
 
         float density_i_squared = density_i * density_i;
 
-        for (size_t j = 0; j < sys->alive_particles; j++) {
+        for (size_t j = 0; j < sys->max_particles; j++) {
             if (i == j)
                 continue;
 
@@ -209,14 +293,14 @@ void calculate_accelerations(ParticleSystem *sys) {
 }
 
 void calculate_velocities(ParticleSystem *sys, float dt) {
-    for (size_t i = 0; i < sys->alive_particles; i++) {
+    for (size_t i = 0; i < sys->max_particles; i++) {
         sys->vel[i].x += sys->acc[i].x * dt;
         sys->vel[i].y += sys->acc[i].y * dt;
     }
 }
 
 void calculate_positions(ParticleSystem *sys, float dt) {
-    for (size_t i = 0; i < sys->alive_particles; i++) {
+    for (size_t i = 0; i < sys->max_particles; i++) {
         sys->pos[i].x += sys->vel[i].x * dt;
         sys->pos[i].y += sys->vel[i].y * dt;
    }

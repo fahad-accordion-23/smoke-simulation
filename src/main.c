@@ -4,8 +4,10 @@
 #include "arena.h"
 #include "particle_system.h"
 
-#define SCREEN_WIDTH 800
+#define SCREEN_WIDTH  800
 #define SCREEN_HEIGHT 600
+#define CELL_WIDTH    16
+#define CELL_HEIGHT   12
 #define MAX_PARTICLES 400
 
 void update_pixel_buffer(ParticleSystem* sys, uint32_t *pixels);
@@ -33,8 +35,12 @@ int main(void) {
     Arena arena = { 0 };
     arena_init(&arena);
 
+    Vector2i dimensions = { SCREEN_WIDTH, SCREEN_HEIGHT };
+    Vector2i cell_dimensions = { CELL_WIDTH, CELL_HEIGHT };
+
     ParticleSystem particle_sys = { 0 };
-    PS_init(&particle_sys, &arena, MAX_PARTICLES, SCREEN_WIDTH, SCREEN_HEIGHT);
+    PS_init(&particle_sys, &arena, MAX_PARTICLES, dimensions, cell_dimensions);
+    PS_generate_random_particles(&particle_sys);
 
     uint32_t *pixels;
     pixels = (uint32_t*) arena_alloc(&arena,
@@ -61,7 +67,6 @@ int main(void) {
                 goto quit;
         }
 
-        PS_generate_random_particles(&particle_sys, dt);
         PS_tick(&particle_sys, dt);
 
         memset(pixels, 0, SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(uint32_t));
@@ -83,11 +88,11 @@ quit:
 }
 
 void update_pixel_buffer(ParticleSystem* sys, uint32_t *pixels) {
-    for (size_t i = 0; i < sys->alive_particles; i++) {
+    for (size_t i = 0; i < sys->max_particles; i++) {
         int px = (int)sys->pos[i].x;
         int py = (int)sys->pos[i].y;
 
-        if (px >= 0 && px < sys->bound_x && py >= 0 && py < sys->bound_y) {
+        if (px >= 0 && px < sys->dimensions.x && py >= 0 && py < sys->dimensions.y) {
             pixels[py * SCREEN_WIDTH + px] = sys->color[i].value;
         }
     }
