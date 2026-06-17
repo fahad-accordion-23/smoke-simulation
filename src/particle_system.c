@@ -54,6 +54,9 @@ void PS_init(ParticleSystem *sys,
     sys->dimensions = dimensions;
 
     sys->cell_dimensions = cell_dimensions;
+ 
+    sys->inset.x = cell_dimensions.x * 5;
+    sys->inset.y = cell_dimensions.y * 5;
 
     sys->cell_cols = (size_t) (dimensions.x / cell_dimensions.x);
     sys->cell_rows = (size_t) (dimensions.y / cell_dimensions.y);
@@ -91,8 +94,15 @@ void PS_init(ParticleSystem *sys,
 
 void PS_generate_random_particles(ParticleSystem *sys) {
     for (size_t i = 0; i < sys->max_particles; i++) {
-        sys->pos[i].x = (float) sys->dimensions.x / 2.0f + f_generate_rand(-300.0f, 300.0f);
-        sys->pos[i].y = (float) sys->dimensions.y / 2.0f + f_generate_rand(-200.0f, 200.0f);
+
+        float min_x = (float) sys->inset.x;
+        float max_x = (float) (sys->dimensions.x - sys->inset.x);
+
+        float min_y = (float) sys->inset.y;
+        float max_y = (float) (sys->dimensions.y - sys->inset.y);
+
+        sys->pos[i].x = f_generate_rand(min_x, max_x);
+        sys->pos[i].y = f_generate_rand(min_y, max_y);
     }
 
     for (size_t i = 0; i < sys->max_particles; i++) {

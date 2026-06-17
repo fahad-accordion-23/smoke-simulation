@@ -38,6 +38,7 @@ typedef struct {
     size_t max_particles;
 
     Vector2i dimensions;
+    Vector2i inset;
 
     Vector2i cell_dimensions;
     size_t   cell_rows;
