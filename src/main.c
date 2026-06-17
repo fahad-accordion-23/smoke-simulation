@@ -8,7 +8,7 @@
 #define SCREEN_HEIGHT 600
 #define CELL_WIDTH    8
 #define CELL_HEIGHT   6
-#define MAX_PARTICLES 65536
+#define MAX_PARTICLES 32768
 
 void update_pixel_buffer(ParticleSystem* sys, uint32_t *pixels);
 
@@ -40,6 +40,7 @@ int main(void) {
 
     ParticleSystem particle_sys = { 0 };
     PS_init(&particle_sys, &arena, MAX_PARTICLES, dimensions, cell_dimensions);
+    PS_generate_boundary_particles(&particle_sys);
     PS_generate_random_particles(&particle_sys);
 
     uint32_t *pixels;
@@ -88,9 +89,18 @@ quit:
 }
 
 void update_pixel_buffer(ParticleSystem* sys, uint32_t *pixels) {
+    for (size_t i = 0; i < sys->num_boundary_particles; i++) {
+        int px = (int) sys->pos_b[i].x;
+        int py = (int) sys->pos_b[i].y;
+
+        if (px >= 0 && px < sys->dimensions.x && py >= 0 && py < sys->dimensions.y) {
+            pixels[py * SCREEN_WIDTH + px] = 0xFFFFFFFF;
+        }
+    }
+
     for (size_t i = 0; i < sys->max_particles; i++) {
-        int px = (int)sys->pos[i].x;
-        int py = (int)sys->pos[i].y;
+        int px = (int) sys->pos[i].x;
+        int py = (int) sys->pos[i].y;
 
         if (px >= 0 && px < sys->dimensions.x && py >= 0 && py < sys->dimensions.y) {
             pixels[py * SCREEN_WIDTH + px] = sys->color[i].value;

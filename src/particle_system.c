@@ -1,7 +1,6 @@
 #include "particle_system.h"
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 
 /* CONSTANTS */
 
@@ -9,10 +8,10 @@
 
 #define GRAVITY       +9.81f
 #define PI            3.141592654f
-#define PARTICLE_MASS 1000.0f
-#define FLUID_DENSITY 1562.5f
+#define PARTICLE_MASS 1000000.0f
+#define FLUID_DENSITY 1562000.5f
 #define SPEED_SOUND   20.0f
-#define VISCOSITY     1000.0f
+#define VISCOSITY     1000000.0f
 
 #define CUTOFF_DISTANCE 5.0f
 #define CUTOFF_DISTANCE_SQUARED CUTOFF_DISTANCE * CUTOFF_DISTANCE
@@ -81,6 +80,9 @@ void PS_init(ParticleSystem *sys,
     sys->color   = arena_alloc(arena, sizeof(Color), max_particles);
     sys->color_s = arena_alloc(arena, sizeof(Color), max_particles);
 
+    sys->num_boundary_particles = (size_t) (sys->dimensions.x * 2 + sys->dimensions.y * 2 - 4);
+    sys->pos_b = arena_alloc(arena, sizeof(Vector2f), sys->num_boundary_particles);
+
     memset(sys->density, 0, sizeof(float) * max_particles);
 
     memset(sys->force  , 0, sizeof(Vector2f) * max_particles);
@@ -92,14 +94,47 @@ void PS_init(ParticleSystem *sys,
     memset(sys->bin, 0, sizeof(Bin) * sys->cell_rows * sys->cell_cols);
 }
 
+void PS_generate_boundary_particles(ParticleSystem *sys) {
+    Vector2i inset = sys->inset;
+
+    int width  = sys->dimensions.x;
+    int height = sys->dimensions.y;
+
+    int next_particle_index = 0;
+
+    for (int i = inset.x; i < width - inset.x; i++) {
+        sys->pos_b[next_particle_index].x = (float) i;
+        sys->pos_b[next_particle_index].y = (float) inset.y;
+        next_particle_index++;
+    }
+
+    for (int i = inset.x; i < width - inset.x; i++) {
+        sys->pos_b[next_particle_index].x = (float) i;
+        sys->pos_b[next_particle_index].y = (float) (height - inset.y - 1);
+        next_particle_index++;
+    }
+
+    for (int i = inset.y; i < height - inset.y - 1; i++) {
+        sys->pos_b[next_particle_index].x = (float) inset.x;
+        sys->pos_b[next_particle_index].y = (float) i;
+        next_particle_index++;
+    }
+
+    for (int i = inset.y; i < height - inset.y - 1; i++) {
+        sys->pos_b[next_particle_index].x = (float) (width - inset.x - 1);
+        sys->pos_b[next_particle_index].y = (float) i;
+        next_particle_index++;
+    }
+}
+
 void PS_generate_random_particles(ParticleSystem *sys) {
     for (size_t i = 0; i < sys->max_particles; i++) {
 
-        float min_x = (float) sys->inset.x;
-        float max_x = (float) (sys->dimensions.x - sys->inset.x);
+        float min_x = (2.0f / 3.0f) * (float) (sys->dimensions.x - sys->inset.x);
+        float max_x = (float) (sys->dimensions.x - sys->inset.x - sys->cell_dimensions.x);
 
-        float min_y = (float) sys->inset.y;
-        float max_y = (float) (sys->dimensions.y - sys->inset.y);
+        float min_y = (float) (sys->dimensions.y / 2);
+        float max_y = (float) (sys->dimensions.y - sys->inset.y - sys->cell_dimensions.y);
 
         sys->pos[i].x = f_generate_rand(min_x, max_x);
         sys->pos[i].y = f_generate_rand(min_y, max_y);
@@ -220,8 +255,8 @@ void calculate_densities(ParticleSystem *sys) {
     size_t cell_cols         = sys->cell_cols;
 
     for (size_t i = 0; i < max_particles; i++) {
-        Vector2f pos_i      = sys->pos[i];
-        float density = 0;
+        Vector2f pos_i   = sys->pos[i];
+        float    density = 0;
 
         int cell_x = (int) pos_i.x / cell_dimensions.x;
         int cell_y = (int) pos_i.y / cell_dimensions.y;
@@ -367,8 +402,31 @@ void calculate_velocities(ParticleSystem *sys, float dt) {
 }
 
 void calculate_positions(ParticleSystem *sys, float dt) {
+    Vector2i dimen = sys->dimensions;
+    Vector2i inset = sys->inset;
+
     for (size_t i = 0; i < sys->max_particles; i++) {
-        sys->pos[i].x += sys->vel[i].x * dt;
-        sys->pos[i].y += sys->vel[i].y * dt;
+        Vector2f pos = sys->pos[i];
+        Vector2f vel = sys->vel[i];
+        
+        float dx = vel.x * dt;
+        float dy = vel.y * dt;
+
+        pos.x += dx;
+        pos.y += dy;
+
+        if ((float) (0 + inset.x) >= pos.x || pos.x >= (float) (dimen.x - inset.x))
+        {
+            pos.x -= dx;
+            sys->vel[i].x *= -0.80f;
+        }
+
+        if ((float) (0 + inset.y) >= pos.y || pos.y >= (float) (dimen.y - inset.y))
+        {
+            pos.y -= dy;
+            sys->vel[i].y *= -0.80f;
+        }
+
+        sys->pos[i] = pos;
    }
 }

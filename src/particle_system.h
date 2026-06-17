@@ -75,6 +75,13 @@ typedef struct {
     Color *color;
     Color *color_s;
 
+    /*
+     * Boundary Particles Data
+     */
+
+    size_t   num_boundary_particles;
+    Vector2f *pos_b;
+
 } ParticleSystem;
 
 void PS_init(ParticleSystem *sys,
@@ -82,6 +89,7 @@ void PS_init(ParticleSystem *sys,
              size_t num_particles,
              Vector2i dimensions,
              Vector2i cell_dimensions);
+void PS_generate_boundary_particles(ParticleSystem *sys);
 void PS_generate_random_particles(ParticleSystem *sys);
 void PS_tick(ParticleSystem *sys, float dt);
 
