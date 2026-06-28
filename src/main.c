@@ -66,6 +66,10 @@ int main(void) {
     float time_since_last_tick   = 0.0f;
     float time_since_last_render = 0.0f;
 
+    /* FPS calculation stuff */
+    float time_since_previous_second = 0.0f;
+    int frames_rendered = 0;
+
     SDL_Event event;
     
     while (1) {
@@ -75,6 +79,7 @@ int main(void) {
 
         time_since_last_tick += render_dt;
         time_since_last_render += render_dt;
+        time_since_previous_second += render_dt;
 
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_EVENT_QUIT)
@@ -101,6 +106,15 @@ int main(void) {
             SDL_RenderClear(renderer);
             SDL_RenderTexture(renderer, screen_texture, NULL, NULL);
             SDL_RenderPresent(renderer);
+
+            frames_rendered += 1;
+        }
+
+        if (time_since_previous_second >= 1.0f) {
+
+            printf("FPS: %d\n", frames_rendered);
+            time_since_previous_second = 0.0f;
+            frames_rendered = 0;
         }
     }
 
