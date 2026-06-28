@@ -3,12 +3,18 @@
 #include <unistd.h>
 #include "arena.h"
 #include "particle_system.h"
+#include <stdio.h>
 
 #define SCREEN_WIDTH  800
-#define SCREEN_HEIGHT 600
-#define CELL_WIDTH    8
-#define CELL_HEIGHT   6
-#define MAX_PARTICLES 32768
+#define SCREEN_HEIGHT 800
+#define CELL_WIDTH    10                 // px
+#define CELL_HEIGHT   10                 // px
+#define MAX_PARTICLES 1000
+#define TICK_RATE     200                // Hz
+#define PHYSICS_DT    (1.0f / TICK_RATE) // seconds
+#define FRAME_RATE    24                 // Hz
+
+#define MAX_TICKS_PER_FRAME (TICK_RATE * 0.25f)
 
 void update_pixel_buffer(ParticleSystem* sys, uint32_t *pixels);
 
@@ -56,27 +62,46 @@ int main(void) {
                                        SCREEN_HEIGHT);
 
     Uint64 last_time = SDL_GetPerformanceCounter();
+
+    float time_since_last_tick   = 0.0f;
+    float time_since_last_render = 0.0f;
+
     SDL_Event event;
     
     while (1) {
         Uint64 current_time = SDL_GetPerformanceCounter();
-        float dt = (float) (current_time - last_time) / (float) SDL_GetPerformanceFrequency();
+        float render_dt = (float) (current_time - last_time) / (float) SDL_GetPerformanceFrequency();
         last_time = current_time;
+
+        time_since_last_tick += render_dt;
+        time_since_last_render += render_dt;
 
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_EVENT_QUIT)
                 goto quit;
         }
 
-        PS_tick(&particle_sys, dt);
+        int ticks_processed = 0;
+        while (time_since_last_tick >= (1.0f / TICK_RATE) && ticks_processed <= MAX_TICKS_PER_FRAME) {
 
-        memset(pixels, 0, SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(uint32_t));
-        update_pixel_buffer(&particle_sys, pixels);
+            time_since_last_tick -= (1.0f / TICK_RATE);
+            PS_tick(&particle_sys, PHYSICS_DT);
 
-        SDL_UpdateTexture(screen_texture, NULL, pixels, SCREEN_WIDTH * sizeof(uint32_t));
-        SDL_RenderClear(renderer);
-        SDL_RenderTexture(renderer, screen_texture, NULL, NULL);
-        SDL_RenderPresent(renderer);
+            ticks_processed += 1;
+        }
+
+        if (time_since_last_render >= (1.0f / FRAME_RATE)) {
+
+            time_since_last_render = 0.0f;
+
+            memset(pixels, 0, SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(uint32_t));
+            update_pixel_buffer(&particle_sys, pixels);
+
+            SDL_UpdateTexture(screen_texture, NULL, pixels, SCREEN_WIDTH * sizeof(uint32_t));
+            SDL_RenderClear(renderer);
+            SDL_RenderTexture(renderer, screen_texture, NULL, NULL);
+            SDL_RenderPresent(renderer);
+        }
     }
 
 quit:

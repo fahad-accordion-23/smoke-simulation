@@ -8,12 +8,12 @@
 
 #define GRAVITY       +9.81f
 #define PI            3.141592654f
-#define PARTICLE_MASS 1000000.0f
+#define PARTICLE_MASS 500000.0f
 #define FLUID_DENSITY 1562000.5f
-#define SPEED_SOUND   20.0f
-#define VISCOSITY     1000000.0f
+#define SPEED_SOUND   343.0f
+#define VISCOSITY     500000.0f
 
-#define CUTOFF_DISTANCE 5.0f
+#define CUTOFF_DISTANCE 10.0f
 #define CUTOFF_DISTANCE_SQUARED CUTOFF_DISTANCE * CUTOFF_DISTANCE
 #define CUTOFF_DISTANCE_TO_8 (CUTOFF_DISTANCE * \
                               CUTOFF_DISTANCE * \
@@ -133,7 +133,7 @@ void PS_generate_random_particles(ParticleSystem *sys) {
         float min_x = (2.0f / 3.0f) * (float) (sys->dimensions.x - sys->inset.x);
         float max_x = (float) (sys->dimensions.x - sys->inset.x - sys->cell_dimensions.x);
 
-        float min_y = (float) (sys->dimensions.y / 2);
+        float min_y = (float) (sys->dimensions.y / 2) + 100.0f;
         float max_y = (float) (sys->dimensions.y - sys->inset.y - sys->cell_dimensions.y);
 
         sys->pos[i].x = f_generate_rand(min_x, max_x);
